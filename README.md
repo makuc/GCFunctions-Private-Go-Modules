@@ -54,6 +54,97 @@ Now also replace <PROJECT-ID> on the 2nd line with your actual Project-ID from y
 And make sure you are *cloning* a correct repository (to save credentials) by adjusting URL on line 17
 (replace <USERNAME> and <REPO-NAME> with you actual values)
 
+
+### Steps for Gaining Access to Private Repositories
+
+To gain access and use the OAuth Token, you have to made proper `cloudbuild.yaml` steps:
+
+```console
+secrets:
+- kmsKeyName: projects/<PROJECT-ID>/locations/global/keyRings/github-keyring/cryptoKeys/github-token
+  secretEnv:
+    GITHUB: "<EncodedAccessToken>"
+```
+
+This must be at the beginning of the `cloudbuild.yaml` file. It is used to Decrypt the OAuth Token
+(which we prepared earlier) used for gaining access to your Private Repository.
+
+Here we assign the decrypted value to the ENV variable called `GITHUB`.
+
+
+Now you must actually use this ENV to gain access to your private repository:
+
+```console
+steps:
+# Load dependencies
+- name: 'gcr.io/cloud-builders/go'
+  entrypoint: 'ash' # because this is alpine
+  args:
+  - -c
+  - |
+    # Here we configure ACCESS to our private GIT repository
+    mkdir tmp_cloning_dir
+    cd tmp_cloning_dir
+    git config --global credential.helper 'cache --timeout 300'
+    git clone --depth=1 https://$$GITHUB:x-oauth-basic@github.com/<USERNAME>/<REPO-NAME>.git
+    cd ..
+    rm -fr tmp_cloning_dir
+
+    # Now we vendor all the functions
+    for d in */ ; do
+      cd $d
+      go mod tidy
+      go mod vendor
+      rm -f go.mod
+      rm -f go.sum
+      cd ..
+    done
+    # With this we are ready to deploy them!
+  secretEnv: ['GITHUB']
+  dir: 'functions'
+```
+
+Since all our functions are created inside `functions` directory, we directly assign it as our workdir.
+
+We use the Cloud Builder for Go with a *custom* entrypoint, since we want to execute some *bash* commands.
+First we create a new temporary directory and go inside it.
+We set *global* setting for *git* to make it use **credential.helper cache** and set the *cache* timeout to 5 minutes.
+Then we *clone* our Private Repository using the OAuth Access Token from the ENV GITHUB to save and cache our credentials
+using a history *depth* of 1.
+
+Since our access is with this established, we return to the original *workdir* and delete our temporary folder.
+
+Now all we have to do is go into each subfolder (which is an independent Cloud Function) and execute *go*
+commands for modules... First we **tidy** our `go.mod` file and then we **vendor** our dependencies.
+
+Once our dependencies are vendored, we delete `go.mod` and `go.sum` files, since we don't want it to conflict with our vendoring
+(`gcloud build deploy` gives preference to using *modules* to build instead of using vendored dependencies).
+
+All the following steps can be used to freely deploy as many functions as you want without having to pay any more attention
+to whether you've manually vendored them or not!
+
+Each Cloud Build ste for Cloud Functions can be defined like this:
+
+```console
+- name: 'gcr.io/cloud-builders/gcloud'
+  args:
+  - alpha
+  - functions
+  - deploy
+  - ${_PREFIX}-func1
+  - --trigger-http
+  - --entry-point=BrezBaze
+  - --runtime=go111
+  - --memory=128MB
+  dir: 'functions/noDBExp'
+```
+
+Note:
+* ${_PREFIX} - used to give custom prefix to all functions when deploying them as a custom (probably temporary) group
+and you don't want it to interfere with their another, separate instance.
+* dir: 'functions/<function-subdirectory>' - This is where you specify the ***root*** folder for this individual Cloud Function.
+
+
 ### Correct modules Import paths in files:
 
 Since you'll be testing this in a Private Repository, don't forget to properly adjust import paths and/or module URLs in the following files:

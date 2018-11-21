@@ -4,7 +4,7 @@ secrets:
     GITHUB: "<EncodedAccessToken>"
 
 steps:
-# Playing with GO
+# Load dependencies
 - name: 'gcr.io/cloud-builders/go'
   entrypoint: 'ash' # because this is alpine
   args:
