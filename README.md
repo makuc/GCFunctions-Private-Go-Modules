@@ -2,7 +2,7 @@
 
 ## Overview
 
-This example shows how to easily deploy Cloud Functions written in Go which are using *private Go modules*.
+This example shows how to easily deploy Cloud Functions written in Go which are using **private Go modules**.
 It achieves this using custom Cloud Build steps to gain acces to private Git repositories.
 It uses an X-OAUTH-TOKEN (from GitHub), which is securely Encrypted using Cloud KMS and after Decryption stored as an ENV.
 
@@ -30,7 +30,7 @@ $ cd prep
 $ make sample
 ```
 
-Replace content of the file (*including newline character* at the end...There can only be a single string) `github-token`
+Replace content of the file (**including newline character** at the end...There can only be a single string) `github-token`
 with your actual token.
 
 To generate this token, go here: [Personal access tokens](https://github.com/settings/tokens)
@@ -51,7 +51,7 @@ Look at the 4th line and replace <EncodedAccessToken> with your encoded/encrypte
 
 Now also replace <PROJECT-ID> on the 2nd line with your actual Project-ID from your Google Cloud.
 
-And make sure you are *cloning* a correct repository (to save credentials) by adjusting URL on line 17
+And make sure you are **cloning** a correct repository (to save credentials) by adjusting URL on line 17
 (replace <USERNAME> and <REPO-NAME> with you actual values)
 
 
@@ -106,15 +106,15 @@ steps:
 
 Since all our functions are created inside `functions` directory, we directly assign it as our workdir.
 
-We use the Cloud Builder for Go with a *custom* entrypoint, since we want to execute some *bash* commands.
+We use the Cloud Builder for Go with a *custom* entrypoint, since we want to execute some **bash** commands.
 First we create a new temporary directory and go inside it.
-We set *global* setting for *git* to make it use **credential.helper cache** and set the *cache* timeout to 5 minutes.
-Then we *clone* our Private Repository using the OAuth Access Token from the ENV GITHUB to save and cache our credentials
+We set **global** setting for *Git* to make it use **credential.helper cache** and set the *cache* timeout to 5 minutes.
+Then we **clone** our Private Repository using the OAuth Access Token from the ENV GITHUB to save and cache our credentials
 using a history *depth* of 1.
 
 Since our access is with this established, we return to the original *workdir* and delete our temporary folder.
 
-Now all we have to do is go into each subfolder (which is an independent Cloud Function) and execute *go*
+Now all we have to do is go into each subfolder (which is an independent Cloud Function) and execute *Go*
 commands for modules... First we **tidy** our `go.mod` file and then we **vendor** our dependencies.
 
 Once our dependencies are vendored, we delete `go.mod` and `go.sum` files, since we don't want it to conflict with our vendoring
