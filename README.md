@@ -59,7 +59,7 @@ And make sure you are **cloning** a correct repository (to save credentials) by 
 
 To gain access and use the OAuth Token, you have to made proper `cloudbuild.yaml` steps:
 
-```console
+```yaml
 secrets:
 - kmsKeyName: projects/<PROJECT-ID>/locations/global/keyRings/github-keyring/cryptoKeys/github-token
   secretEnv:
@@ -74,7 +74,7 @@ Here we assign the decrypted value to the ENV variable called `GITHUB`.
 
 Now you must actually use this ENV to gain access to your private repository:
 
-```console
+```yaml
 steps:
 # Load dependencies
 - name: 'gcr.io/cloud-builders/go'
@@ -125,7 +125,7 @@ to whether you've manually vendored them or not!
 
 Each Cloud Build ste for Cloud Functions can be defined like this:
 
-```console
+```yaml
 - name: 'gcr.io/cloud-builders/gcloud'
   args:
   - alpha
@@ -220,7 +220,7 @@ more).
 Uploading tarball of [.] to [gs://<PROJECT-ID>_cloudbuild/source/<OMITTED>.tgz]
 Created [https://cloudbuild.googleapis.com/v1/projects/<PROJECT-ID>/builds/<OMITTED>].
 Logs are available at [https://console.cloud.google.com/gcr/builds/<OMITTED>].
----------------------------------------------------------------------------- REMOTE BUILD OUTPUT -----------------------------------------------------------------------------
+--------------------------------------------- REMOTE BUILD OUTPUT ------------------------------------------------
 starting build "<OMITTED>"
 
 FETCHSOURCE
@@ -257,7 +257,7 @@ Step #1: versionId: '29'
 Finished Step #1
 PUSH
 DONE
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------
 
 ID         CREATE_TIME                DURATION  SOURCE                                             IMAGES  STATUS
 <OMITTED>  2018-11-21T13:40:49+00:00  41S       gs://<PROJECT-ID>_cloudbuild/source/<OMITTED>.tgz  -       SUCCESS
