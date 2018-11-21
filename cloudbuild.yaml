@@ -1,0 +1,44 @@
+secrets:
+- kmsKeyName: projects/<PROJECT-ID>/locations/global/keyRings/github-keyring/cryptoKeys/github-token
+  secretEnv:
+    GITHUB: "<EncodedAccessToken>"
+
+steps:
+# Playing with GO
+- name: 'gcr.io/cloud-builders/go'
+  entrypoint: 'ash' # because this is alpine
+  args:
+  - -c
+  - |
+    # Here we configure ACCESS to our private GIT repository
+    mkdir tmp_cloning_dir
+    cd tmp_cloning_dir
+    git config --global credential.helper 'cache --timeout 300'
+    git clone --depth=1 https://$$GITHUB:x-oauth-basic@github.com/<USERNAME>/<REPO-NAME>.git
+    cd ..
+    rm -fr tmp_cloning_dir
+    
+    # Now we vendor all the functions
+    for d in */ ; do
+      cd $d
+      go mod tidy
+      go mod vendor
+      rm -f go.mod
+      rm -f go.sum
+      cd ..
+    done
+    # With this we are ready to deploy them!
+  secretEnv: ['GITHUB']
+  dir: 'functions'
+
+- name: 'gcr.io/cloud-builders/gcloud'
+  args:
+  - alpha
+  - functions
+  - deploy
+  - ${_PREFIX}-func1
+  - --trigger-http
+  - --entry-point=BrezBaze
+  - --runtime=go111
+  - --memory=128MB
+  dir: 'functions/noDBExp'
