@@ -1,1 +1,1 @@
-module github.com/makuc/diploma
+module github.com/makuc/GCFunctions-Private-Go-Modules

@@ -1,1 +1,1 @@
-module github.com/makuc/diploma/modules/mytest
+module github.com/makuc/GCFunctions-Private-Go-Modules/modules/mytest
