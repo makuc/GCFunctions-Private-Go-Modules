@@ -1,7 +1,7 @@
-package noDBExp
+package anotherFunc
 
 import (
-	"github.com/makuc/diploma/modules/mytest"
+	"github.com/makuc/GCFunctions-Private-Go-Modules/modules/mytest"
 	"net/http"
 )
 

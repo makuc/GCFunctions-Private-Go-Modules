@@ -1,36 +1,31 @@
 secrets:
 - kmsKeyName: projects/<PROJECT-ID>/locations/global/keyRings/github-keyring/cryptoKeys/github-token
   secretEnv:
-    GITHUB: "<EncodedAccessToken>"
+    GITHUB: "CiQATCXijDFx3wTME12zXaUjStIZOyNdRR9ofmyn0iMRc+ifpwYSUQDGtndZa2snc6lLZiXaYmET
+             ujTdvcRI6SoBcVjuxKL74T5qo4yjN2OK/+LgGTVB7r2fWt6IOxCXPVvpdndgWP9SCvIUIq2QORdZ
+             Y7pYJ4C2Mw=="
 
 steps:
-# Load dependencies
+# Playing with GO
 - name: 'gcr.io/cloud-builders/go'
   entrypoint: 'ash' # because this is alpine
   args:
   - -c
   - |
-    # Here we configure ACCESS to our private GIT repository
-    mkdir tmp_cloning_dir
-    cd tmp_cloning_dir
-    git config --global credential.helper 'cache --timeout 300'
-    git clone --depth=1 https://$$GITHUB:x-oauth-basic@github.com/<USERNAME>/<REPO-NAME>.git
-    cd ..
-    rm -fr tmp_cloning_dir
-    
-    # Now we vendor all the functions
-    for d in */ ; do
+    ash privateRepoAccess  # Exec script to gain Private Access
+    cd functions           # Our functions are here
+    for d in */ ; do       # Now vendor all of them
       cd $d
+      pwd
       go mod tidy
       go mod vendor
       rm -f go.mod
       rm -f go.sum
       cd ..
     done
-    # With this we are ready to deploy them!
   secretEnv: ['GITHUB']
-  dir: 'functions'
 
+# Build and Deploy Cloud Functions
 - name: 'gcr.io/cloud-builders/gcloud'
   args:
   - alpha
@@ -42,3 +37,14 @@ steps:
   - --runtime=go111
   - --memory=128MB
   dir: 'functions/noDBExp'
+- name: 'gcr.io/cloud-builders/gcloud'
+  args:
+    - alpha
+    - functions
+    - deploy
+    - ${_PREFIX}-func2
+    - --trigger-http
+    - --entry-point=BrezBaze
+    - --runtime=go111
+    - --memory=128MB
+  dir: 'functions/anotherFunc'

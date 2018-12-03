@@ -1,4 +1,4 @@
-package noDBExp
+package anotherFunc
 
 import (
 	"io/ioutil"
@@ -7,17 +7,18 @@ import (
 	"testing"
 )
 
+const method = "GET"
 const url = "/"
 const status = http.StatusOK
 const body = string("Hello World!\n")
-func respBodyConversion(source []byte)(string) {
+
+func respBodyConversion(source []byte) string {
 	return string(source)
 }
 
-
 // Should be left as is?
 func TestBrezBaze(t *testing.T) {
-	r, err := http.NewRequest("GET", "/", nil)
+	r, err := http.NewRequest(method, url, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,8 +29,8 @@ func TestBrezBaze(t *testing.T) {
 
 	resp := w.Result()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Status: %v | %v", resp.StatusCode, http.StatusOK)
+	if resp.StatusCode != status {
+		t.Errorf("Status: %v | %v", resp.StatusCode, status)
 	}
 
 	respBody, err := ioutil.ReadAll(resp.Body)

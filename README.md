@@ -2,41 +2,46 @@
 
 ## Overview
 
-This example shows how to easily deploy Cloud Functions written in Go which are using **private Go modules**.
-It achieves this using custom Cloud Build steps to gain acces to private Git repositories.
-It uses an X-OAUTH-TOKEN (from GitHub), which is securely Encrypted using Cloud KMS and after Decryption stored as an ENV.
+This example shows how to easily deploy Cloud Functions written in Go using **private Go modules**. Achieved using custom **Cloud Build steps** to gain acces to _private_ Git repositories and _automatically_ **vendors** them in the cloud _during the deployment_.
 
-What this example does is:
+It uses an **X-OAUTH-TOKEN** (from _GitHub_), which is securely **Encrypted** using **Cloud KMS** and after Decryption stored as an **ENV variable**.
+
+
+
+### What this example does is:
+
 * Helps you setup Cloud KMS token encryption
-* Sets Cloud Build Git *credentials.helper* to *cache* with a timeout of 5 min
-* During this time it *vendor's* all functions (subdirectories) in the `functions` dir
-* Deletes `go.mod` and `go.sum` files for all functions (subdirectories) in the `functions` dir
-* Continues the build process in the following Cloud Build steps which can freely use *gcloud alpha functions deploy* commands without conflicts.
+* It **vendors** all _functions_ (subdirectories) in the `/functions` dir
+* Deletes `go.mod` and `go.sum` files for all _functions_ (subdirectories) in the `/functions` dir
+* Uses the appropriate `gcloud` commands to deploy the specified functions as Cloud Build steps to deploy functions without `go.mod` files conflicting with `vendor`-ed dependencies.
 
 The example uses the following products:
 * Cloud Functions
 * Cloud Build
+* Cloud KMS
+
+
 
 ## Walkthrough
 
 ### Pre-requisites
 * A Google Cloud Platform account with billing enabled
 
+
+
 ### Prepare GitHub OAuth Token and encrypt it on Cloud KMS
 
-Prepare a file where you'll input your OAuth Token (don't worry, this whole folder is in .gitignore)
+Prepare a file where you'll input your OAuth Token (the whole `prep` folder is in `.gitignore`, except for `Makefile`)
+
 ```console
 $ cd prep
 $ make sample
 ```
 
-Replace content of the file (**including newline character** at the end...There can only be a single string) `github-token`
-with your actual token.
+Replace content of `github-token` file (*including newline character* at the end...There can only be a single string) with your actual OAuth token.
 
-To generate this token, go here: [Personal access tokens](https://github.com/settings/tokens)
-and click on "Generate new token". Check the checkbox next to *"repo"* to give it full access to your repositories
-and click on "Generate token" at the bottom of the page
-(you can also give it a description so you'll know what you'll be using it for).
+To generate this token for **Github**, go here: [Personal access tokens](https://github.com/settings/tokens)
+and click on "Generate new token". Check the checkbox next to *"repo"* to give it access to your private repositories and click on "Generate token" at the bottom of the page (you can also give it a description so you'll know what you'll be using it for).
 
 After the sample file contains only your access token, execute:
 
@@ -46,33 +51,42 @@ $ make newkey
 $ make secretenv
 ```
 
-Open a newly created file `encoded` and copy its content to `cloudbuild.yaml` inside the root directory of your repository.
-Look at the 4th line and replace <EncodedAccessToken> with your encoded/encrypted string.
+Open a newly created file `encoded` and copy its content to `cloudbuild.yaml` inside the root directory of your repository. Find the 4th line and replace the value with your encrypted string.
 
-Now also replace <PROJECT-ID> on the 2nd line with your actual Project-ID from your Google Cloud.
+Now also replace `<PROJECT-ID>` in the 2nd line with your actual Project-ID from Google Cloud.
 
-And make sure you are **cloning** a correct repository (to save credentials) by adjusting URL on line 17
-(replace <USERNAME> and <REPO-NAME> with you actual values)
+**Note:**
+Default names for _Keyring_ and _Key_ are specified (and configurable) directly inside `Makefile`.
 
 
 ### Steps for Gaining Access to Private Repositories
 
-To gain access and use the OAuth Token, you have to made proper `cloudbuild.yaml` steps:
+To gain access and use the OAuth Token, you have to make proper `cloudbuild.yaml` steps:
 
 ```yaml
 secrets:
-- kmsKeyName: projects/<PROJECT-ID>/locations/global/keyRings/github-keyring/cryptoKeys/github-token
+- kmsKeyName: projects/<PROJECT-ID>/locations/global/keyRings/<KeyRingName>/cryptoKeys/<CryptoKeyName>
+# Default `KeyRingName` and `CryptoKeyName`, specified in Makefile,
+# are `github-keyring` and `github-token` respectively.
   secretEnv:
     GITHUB: "<EncodedAccessToken>"
 ```
 
-This must be at the beginning of the `cloudbuild.yaml` file. It is used to Decrypt the OAuth Token
-(which we prepared earlier) used for gaining access to your Private Repository.
+This must be at the beginning of the `cloudbuild.yaml` file. It is used to Decrypt the earlier prepared OAuth Token needed to gain access to your Private Repository.
 
-Here we assign the decrypted value to the ENV variable called `GITHUB`.
+The decrypted value is stored in the ENV variable called `GITHUB`.
 
+To configure access to our private repository, we have to tell _Git_ how to access it. For this purpose we have an _ash_ script (we are using alpine), where we configure _Git_ to use proper credentials when accessing private repositories. At the end, `privateRepoAccess` should look something like this:
 
-Now you must actually use this ENV to gain access to your private repository:
+```bash
+#!/bin/ash
+
+git config --global url."https://$GITHUB:x-oauth-basic@github.com/<username>/".insteadOf "https://github.com/<username>"
+```
+
+We configure _Git_ to modify all URLs trying to access Github repositories from `<username>` to use proper credentials to access them. This way, we can configure proper Github access at a _per user_ basis, in case multiple people are working on our project and they have their own private repositories hosting certain packages they are working on.
+
+And now we must execute this script to actually use these configurations:
 
 ```yaml
 steps:
@@ -82,48 +96,31 @@ steps:
   args:
   - -c
   - |
-    # Here we configure ACCESS to our private GIT repository
-    mkdir tmp_cloning_dir
-    cd tmp_cloning_dir
-    git config --global credential.helper 'cache --timeout 300'
-    git clone --depth=1 https://$$GITHUB:x-oauth-basic@github.com/<USERNAME>/<REPO-NAME>.git
-    cd ..
-    rm -fr tmp_cloning_dir
-
-    # Now we vendor all the functions
-    for d in */ ; do
+    ash privateRepoAccess  # Exec script to gain Private Access
+    cd functions           # Our functions are here
+    for d in */ ; do       # Now vendor all of them
       cd $d
+      pwd
       go mod tidy
       go mod vendor
       rm -f go.mod
       rm -f go.sum
       cd ..
     done
-    # With this we are ready to deploy them!
   secretEnv: ['GITHUB']
-  dir: 'functions'
 ```
 
-Since all our functions are created inside `functions` directory, we directly assign it as our workdir.
+We use the Cloud Builder for Go with a *custom* entrypoint, since we want to execute some *ash* (bash alternative) commands.
 
-We use the Cloud Builder for Go with a *custom* entrypoint, since we want to execute some **bash** commands.
-First we create a new temporary directory and go inside it.
-We set **global** setting for *Git* to make it use **credential.helper cache** and set the *cache* timeout to 5 minutes.
-Then we **clone** our Private Repository using the OAuth Access Token from the ENV GITHUB to save and cache our credentials
-using a history *depth* of 1.
+First we execute the script to make proper _Git_ configurations, and then we navigate to the folder where all our functions (one function per subfolder) are located - `functions`.
 
-Since our access is with this established, we return to the original *workdir* and delete our temporary folder.
+Now all we have to do is go into each subfolder (which is an independent Cloud Function) and execute *Go* commands to *vendor* our modules ... First we **tidy** our `go.mod` file (you can remove this step) and then we **vendor** our dependencies.
 
-Now all we have to do is go into each subfolder (which is an independent Cloud Function) and execute *Go*
-commands for modules... First we **tidy** our `go.mod` file and then we **vendor** our dependencies.
+Once our dependencies are vendored, we delete `go.mod` and `go.sum` files, since we don't want them to conflict with our vendored dependencies (`gcloud alpha functions deploy` gives preference to using *modules* to build when possible).
 
-Once our dependencies are vendored, we delete `go.mod` and `go.sum` files, since we don't want it to conflict with our vendoring
-(`gcloud build deploy` gives preference to using *modules* to build instead of using vendored dependencies).
+All the following steps can be used to freely deploy as many functions as you want without having to pay any more attention to whether you've **manually** *vendored* them or not!
 
-All the following steps can be used to freely deploy as many functions as you want without having to pay any more attention
-to whether you've manually vendored them or not!
-
-Each Cloud Build ste for Cloud Functions can be defined like this:
+Each Cloud Build step for Cloud Functions can be defined like this:
 
 ```yaml
 - name: 'gcr.io/cloud-builders/gcloud'
@@ -131,7 +128,7 @@ Each Cloud Build ste for Cloud Functions can be defined like this:
   - alpha
   - functions
   - deploy
-  - ${_PREFIX}-func1
+  - ${_PREFIX}-<function-name>
   - --trigger-http
   - --entry-point=BrezBaze
   - --runtime=go111
@@ -139,10 +136,10 @@ Each Cloud Build ste for Cloud Functions can be defined like this:
   dir: 'functions/noDBExp'
 ```
 
-Note:
-* ${_PREFIX} - used to give custom prefix to all functions when deploying them as a custom (probably temporary) group
-and you don't want it to interfere with their another, separate instance.
-* dir: 'functions/<function-subdirectory>' - This is where you specify the ***root*** folder for this individual Cloud Function.
+**Note:**
+* ${_PREFIX} - used to give custom prefix to all functions when deploying them as a custom (probably temporary) group and you don't want it to interfere with their another, separate instance.
+* <function-name> - Replace with your own name for the function
+* dir: 'functions/<function-subdirectory>' - This is where you specify the ***root*** folder for this **individual** Cloud Function.
 
 
 ### Correct modules Import paths in files:
@@ -164,22 +161,22 @@ To submit a command to build and deploy your group of functions can be easily do
 gcloud builds submit --config cloudbuild.yaml --substitutions=_PREFIX="myprefix" .
 ```
 
-Note:
-Notice the flag: `--substitutions=` - this is how we tell the Cloud Build what out _PREFIX is going to be during this build-time.
-By using the same PREFIX, one can easily delete the whole group of testing functions from the same stage (deployed using the same _PREFIX) by executing this command:
-If you want to remove this option from this command, you'd also have to remove all its occurrences within `cloudbuild.yaml`.
+**Note:**
+
+Notice the flag: `--substitutions=` - this is how we tell the Cloud Build what out _PREFIX is going to be during this build-time. By using the same PREFIX, one can easily delete the whole group of testing functions from the same stage (deployed using the same _PREFIX) by executing this command:
 
 ```console
 gcloud builds submit --config cloudbuilddelete.yaml --substitutions=_PREFIX="myprefix" --no-source
 ```
 
-Note:
-Notice the `--no-source` flag.
-This flag is used because we aren't compiling/building the app, only deleting the already existing Cloud Functions.
-This simply means we have no need for sending any source code,
-which saves us the time it normally takes to upload the source code archive and verify its content.
+**Note:**
 
-Your functions are now online!
+If you want to remove _substitutions_ from this command, you'd also have to remove all its occurrences within `cloudbuild.yaml`.
+
+Notice the `--no-source` flag.
+This flag is used because we aren't compiling/building the app, only deleting the already existing Cloud Functions. This simply means we have no need for sending any source code, which saves us the time it normally takes to upload the source code archive and verify its contents.
+
+Your functions are now online! Or removed ...
 
 To simplify the process, you can also use:
 
@@ -189,6 +186,8 @@ make delete
 ```
 
 Or make a BASH alternative, since it is pretty much the same...
+
+
 
 ### Set up the required permissions
 
@@ -232,7 +231,6 @@ BUILD
 Starting Step #0
 Step #0: Already have image (with digest): gcr.io/cloud-builders/go
 Step #0: <OMITTED>
-Step #0: Cloning into '<REPO-NAME>'...
 Step #0: go: finding github.com/<USERNAME>/<REPO-NAME>/modules/mytest v0.0.0-<OMITTED>-<OMITTED>
 Step #0: go: downloading github.com/<USERNAME>/<REPO-NAME>/modules/mytest v0.0.0-<OMITTED>-<OMITTED>
 Finished Step #0

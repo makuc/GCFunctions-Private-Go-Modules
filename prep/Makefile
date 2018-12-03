@@ -1,11 +1,15 @@
 .phony:
-	encrypt copy clean
+	encrypt secretenv
 
-# Config:
+# BEGIN Config:
+
 KeyRingName = "github-keyring"
 CryptoKeyName = "github-token"
 
 # END Config
+
+
+
 
 sample:
 	@echo OverwriteWithAccessToken> ${CryptoKeyName}
@@ -16,6 +20,7 @@ newkeyring:
 newkey:
 	gcloud kms keys create ${CryptoKeyName} --location=global --keyring=${KeyRingName} --purpose=encryption
 
+# Standalone - The only one needed for Secret Env !!ss
 secretenv:
 	gcloud kms encrypt \
       --plaintext-file=${CryptoKeyName} \

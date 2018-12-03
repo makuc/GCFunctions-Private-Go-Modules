@@ -1,5 +1,5 @@
 package mytest
 
-func Message()([]byte) {
+func Message() []byte {
 	return []byte("Hello World!\n")
 }
